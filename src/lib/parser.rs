@@ -1,4 +1,4 @@
-use crate::lib::ast::{AstHead, AstNode};
+use crate::lib::ast::AstNode;
 use crate::lib::token::Token;
 use crate::lib::{split_results, unlines};
 
@@ -34,9 +34,9 @@ impl<'a> Parser<'a> {
         }
         Token::Minus => {
           self.advance();
-          let minus1 = AstNode::new(AstHead::Number(-1.0), Vec::new());
+          let minus1 = AstNode::number(-1.0);
           match self.factor() {
-            Ok(neg) => results.push(Ok(AstNode::new(AstHead::Times, vec![minus1, neg]))),
+            Ok(neg) => results.push(Ok(AstNode::times(vec![minus1, neg]))),
             Err(error) => {
               results.push(Err(error));
             }
@@ -47,11 +47,10 @@ impl<'a> Parser<'a> {
           if errors.len() > 0 {
             return Err(unlines(errors));
           } else {
-            return Ok(AstNode::new(AstHead::Plus, args));
+            return Ok(AstNode::plus(args));
           }
         }
         _ => {
-          self.advance();
           results.push(Err("Expected to see a '+' or '-' after term".to_string()));
         }
       }
@@ -68,7 +67,7 @@ impl<'a> Parser<'a> {
           if errors.len() > 0 {
             return Err(unlines(errors));
           } else {
-            return Ok(AstNode::new(AstHead::Times, args));
+            return Ok(AstNode::times(args));
           }
         }
         Token::Star => {
@@ -77,10 +76,10 @@ impl<'a> Parser<'a> {
         }
         Token::Slash => {
           self.advance();
-          let minus1 = AstNode::new(AstHead::Number(-1.0), Vec::new());
+          let minus1 = AstNode::number(-1.0);
           match self.exponential() {
             Ok(denom) => {
-              results.push(Ok(AstNode::new(AstHead::Power, vec![denom, minus1])));
+              results.push(Ok(AstNode::power(vec![denom, minus1])));
             }
             Err(msg) => {
               results.push(Err(msg));
@@ -88,7 +87,6 @@ impl<'a> Parser<'a> {
           }
         }
         _ => {
-          self.advance();
           results.push(Err(
             "Expected to see a '*' or '/' after factor.".to_string(),
           ));
@@ -107,7 +105,7 @@ impl<'a> Parser<'a> {
           if errors.len() > 0 {
             return Err(unlines(errors));
           } else {
-            return Ok(AstNode::new(AstHead::Power, args));
+            return Ok(AstNode::power(args));
           }
         }
         Token::Caret => {
@@ -115,7 +113,6 @@ impl<'a> Parser<'a> {
           results.push(self.atom());
         }
         _ => {
-          self.advance();
           results.push(Err("Expected to see a '^' after a base".to_string()));
         }
       }
@@ -138,7 +135,7 @@ impl<'a> Parser<'a> {
           _ => unreachable!(),
         }
       }
-      Token::Number(value) => Ok(AstNode::new(AstHead::Number(value), Vec::new())),
+      Token::Number(value) => Ok(AstNode::number(value)),
       _ => {
         return Err("Expected to see a number here".to_string());
       }

@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Token {
   LParen,
   RParen,
@@ -24,7 +24,7 @@ impl fmt::Display for Token {
       Token::Slash => write!(f, "/"),
       Token::Caret => write!(f, "^"),
       Token::Number(num) => write!(f, "{}", num),
-      Token::Eoi => write!(f, ""),
+      Token::Eoi => write!(f, "♣"),
     }
   }
 }
@@ -40,9 +40,9 @@ pub fn is_eoi(token: Token) -> bool {
 mod test {
   #[test]
   fn test_is_eoi() {
-    use crate::lib::token::Token;
     use crate::lib::token::is_eoi;
+    use crate::lib::token::Token;
     assert!(is_eoi(Token::Eoi));
-    assert!(!is_eoi(Token::LParen)); 
+    assert!(!is_eoi(Token::LParen));
   }
 }

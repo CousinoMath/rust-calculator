@@ -9,12 +9,15 @@ enum State {
     Exit,
 }
 
-fn main() -> io::Result<()>{
+fn main() -> io::Result<()> {
     loop {
         match read_line() {
             Ok(State::Continue) => continue,
             Ok(State::Exit) => break,
-            Err(err) => { eprintln!("{:#?}", err); return Err(err) }
+            Err(err) => {
+                eprintln!("{:#?}", err);
+                return Err(err);
+            }
         }
     }
     Ok(())
@@ -34,7 +37,7 @@ fn read_line() -> io::Result<State> {
                     print!("{}", token);
                 }
                 println!("");
-            },
+            }
             Err(message) => println!("{}", message),
         }
         Ok(State::Continue)

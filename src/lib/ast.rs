@@ -1,7 +1,7 @@
 use std::f64;
 use std::fmt;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum AstHead {
   Plus,
   Times,
@@ -9,6 +9,7 @@ pub enum AstHead {
   Number(f64),
 }
 
+#[derive(Clone)]
 pub struct AstNode {
   head: AstHead,
   tail: Box<Vec<AstNode>>,
@@ -85,5 +86,57 @@ impl AstNode {
     } else {
       self
     }
+  }
+
+  pub fn is_atom(&self) -> bool {
+    self.tail.len() == 0
+  }
+
+  pub fn plus(arguments: Vec<AstNode>) -> AstNode {
+    let len = arguments.len();
+    match len {
+      0 => AstNode::new(AstHead::Number(0.0), Vec::new()),
+      1 => arguments
+        .get(0)
+        .expect("Should be able to get 0th element of a non-empty vector.")
+        .clone(),
+      _ => AstNode::new(AstHead::Plus, arguments),
+    }
+  }
+
+  pub fn times(arguments: Vec<AstNode>) -> AstNode {
+    let len = arguments.len();
+    match len {
+      0 => AstNode::new(AstHead::Number(1.0), Vec::new()),
+      1 => arguments
+        .get(0)
+        .expect("Should be able to get 0th element of a non-empty vector.")
+        .clone(),
+      _ => AstNode::new(AstHead::Times, arguments),
+    }
+  }
+
+  pub fn power(arguments: Vec<AstNode>) -> AstNode {
+    let len = arguments.len();
+    match len {
+      0 => AstNode::new(AstHead::Number(1.0), Vec::new()),
+      1 => arguments
+        .get(0)
+        .expect("Should be able to get 0th element of a non-empty vector.")
+        .clone(),
+      _ => {
+        let last_rest = arguments
+          .split_last()
+          .expect("Should be able to split the last element off a non-empty vector.");
+        let (last, rest) = (last_rest.0.clone(), last_rest.1.clone());
+        rest.iter().rfold(last, |acc, x| {
+          AstNode::new(AstHead::Power, vec![x.clone(), acc])
+        })
+      }
+    }
+  }
+
+  pub fn number(value: f64) -> AstNode {
+    AstNode::new(AstHead::Number(value), Vec::new())
   }
 }

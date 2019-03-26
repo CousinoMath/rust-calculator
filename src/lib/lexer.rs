@@ -1,10 +1,11 @@
 use crate::lib::token::Token;
+use crate::lib::unlines;
 
 pub struct Lexer {
   current_start: usize,
   current_end: usize,
   current: char,
-  source: String, 
+  source: String,
 }
 
 impl Lexer {
@@ -22,7 +23,7 @@ impl Lexer {
       tokens.push(Token::Eoi);
       Ok(tokens)
     } else {
-      Err(messages.iter().fold("".to_string(), |acc, x| acc + x))
+      Err(unlines(messages).trim().to_string())
     }
   }
 
@@ -39,42 +40,145 @@ impl Lexer {
   fn next_token(&mut self) -> Result<Token, String> {
     self.skip_whitespace();
     match self.current {
-      '(' => Ok(Token::LParen),
-      ')' => Ok(Token::RParen),
-      '+' => Ok(Token::Plus),
-      '-' => Ok(Token::Minus),
-      '*' => Ok(Token::Star),
-      '/' => Ok(Token::Slash),
-      '^' => Ok(Token::Caret),
-      c if c.is_ascii_digit() || c == '.' =>
-          self.parse_number().map(|n| Token::Number(n)),
-      _ => Err(format!("Unrecognized character {}", self.current)),
+      '(' => {
+        self.advance();
+        Ok(Token::LParen)
+      }
+      ')' => {
+        self.advance();
+        Ok(Token::RParen)
+      }
+      '+' => {
+        self.advance();
+        Ok(Token::Plus)
+      }
+      '-' => {
+        self.advance();
+        Ok(Token::Minus)
+      }
+      '*' => {
+        self.advance();
+        Ok(Token::Star)
+      }
+      '/' => {
+        self.advance();
+        Ok(Token::Slash)
+      }
+      '^' => {
+        self.advance();
+        Ok(Token::Caret)
+      }
+      c if c.is_ascii_digit() || c == '.' => self.parse_number().map(|n| Token::Number(n)),
+      _ => {
+        self.advance();
+        Err(format!("Unrecognized character {}", self.current))
+      }
     }
   }
 
   fn advance(&mut self) {
     self.current_start = self.current_end;
     if self.current_start < self.source.len() {
-      self.current = self.source[self.current_start..].chars().next().unwrap_or('\0');
+      self.current = self.source[self.current_start..]
+        .chars()
+        .next()
+        .unwrap_or('\0');
       self.current_end += self.current.len_utf8();
+    } else {
+      self.current = '\0';
     }
   }
 
   fn skip_whitespace(&mut self) {
     while self.current.is_whitespace() {
+      println!("Skipping whitespace '{}'", self.current);
       self.advance();
     }
   }
 
   fn parse_number(&mut self) -> Result<f64, String> {
     let mut numeric_chars = Vec::new();
-    while self.current.is_ascii_digit() || self.current == '.' {
+    while self.current.is_ascii_digit() {
       numeric_chars.push(self.current);
+      self.advance();
+    }
+    if self.current == '.' {
+      numeric_chars.push(self.current);
+      self.advance();
+      while self.current.is_ascii_digit() {
+        numeric_chars.push(self.current);
+        self.advance();
+      }
     }
     let numeric_string = numeric_chars.iter().collect::<String>();
-    match numeric_string.parse::<f64>() {
-      Ok(number) => Ok(number),
-      Err(_) => Err(format!("Failed to parse number from '{}'", numeric_string)),
-    }
+    numeric_string
+      .parse::<f64>()
+      .map_err(|_| format!("Failed to parse '{}'", numeric_string))
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use crate::lib::lexer::Lexer;
+  use crate::lib::lexer::Token;
+
+  #[test]
+  fn test_parse_number() {
+    let tokens = Lexer::lex("2.71828182845904523536");
+    assert!(tokens.is_ok());
+    let tokens = tokens.unwrap();
+    let mut tokens = tokens.iter();
+    assert_eq!(
+      tokens.next().unwrap(),
+      &Token::Number(2.71828182845904523536)
+    );
+  }
+
+  #[test]
+  fn test_parse_symbols() {
+    let token = Lexer::lex("(");
+    assert!(token.is_ok());
+    let token = token.unwrap();
+    let mut token = token.iter();
+    assert_eq!(token.next().unwrap(), &Token::LParen);
+
+    let token = Lexer::lex(")");
+    assert!(token.is_ok());
+    let token = token.unwrap();
+    let mut token = token.iter();
+    assert_eq!(token.next().unwrap(), &Token::RParen);
+
+    let token = Lexer::lex("+");
+    assert!(token.is_ok());
+    let token = token.unwrap();
+    let mut token = token.iter();
+    assert_eq!(token.next().unwrap(), &Token::Plus);
+
+    let token = Lexer::lex("-");
+    assert!(token.is_ok());
+    let token = token.unwrap();
+    let mut token = token.iter();
+    assert_eq!(token.next().unwrap(), &Token::Minus);
+
+    let token = Lexer::lex("*");
+    assert!(token.is_ok());
+    let token = token.unwrap();
+    let mut token = token.iter();
+    assert_eq!(token.next().unwrap(), &Token::Star);
+
+    let token = Lexer::lex("/");
+    assert!(token.is_ok());
+    let token = token.unwrap();
+    let mut token = token.iter();
+    assert_eq!(token.next().unwrap(), &Token::Slash);
+
+    let token = Lexer::lex("^");
+    assert!(token.is_ok());
+    let token = token.unwrap();
+    let mut token = token.iter();
+    assert_eq!(token.next().unwrap(), &Token::Caret);
+
+    let token = Lexer::lex("&");
+    assert!(token.is_err());
   }
 }
