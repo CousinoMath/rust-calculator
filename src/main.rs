@@ -3,6 +3,7 @@ use std::io::{self, Write};
 pub mod lib;
 
 use crate::lib::lexer::Lexer;
+use crate::lib::parser::Parser;
 
 enum State {
     Continue,
@@ -33,12 +34,16 @@ fn read_line() -> io::Result<State> {
     } else {
         match Lexer::lex(input.trim()) {
             Ok(tokens) => {
-                for token in tokens {
+                for token in tokens.clone() {
                     print!("{}", token);
                 }
                 println!("");
+                match Parser::parse(tokens.as_slice()) {
+                    Ok(ast) => println!("{} = {}", ast, ast.evaluate()),
+                    Err(message) => eprintln!("{}", message),
+                }
             }
-            Err(message) => println!("{}", message),
+            Err(message) => eprintln!("{}", message),
         }
         Ok(State::Continue)
     }

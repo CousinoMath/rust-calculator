@@ -1,4 +1,4 @@
-use crate::lib::token::Token;
+use crate::lib::token::{ Token, recognize_identifier, };
 use crate::lib::unlines;
 
 pub struct Lexer {
@@ -68,10 +68,11 @@ impl Lexer {
         self.advance();
         Ok(Token::Caret)
       }
-      c if c.is_ascii_digit() || c == '.' => self.parse_number().map(|n| Token::Number(n)),
-      _ => {
+      c if c.is_ascii_digit() || c == '.' => self.lex_number().map(|n| Token::Number(n)),
+      c if c.is_alphabetic() => self.lex_identifier().map(|id| recognize_identifier(&id)),
+      c => {
         self.advance();
-        Err(format!("Unrecognized character {}", self.current))
+        Err(format!("Unrecognized character {}", c))
       }
     }
   }
@@ -91,21 +92,24 @@ impl Lexer {
 
   fn skip_whitespace(&mut self) {
     while self.current.is_whitespace() {
-      println!("Skipping whitespace '{}'", self.current);
       self.advance();
     }
   }
 
-  fn parse_number(&mut self) -> Result<f64, String> {
-    let mut numeric_chars = Vec::new();
-    while self.current.is_ascii_digit() {
+  fn hit_eoi(&self) -> bool {
+    self.current_start >= self.current_end
+  }
+
+  fn lex_number(&mut self) -> Result<f64, String> {
+    let mut numeric_chars: Vec<char> = Vec::new();
+    while self.current.is_ascii_digit() && !self.hit_eoi() {
       numeric_chars.push(self.current);
       self.advance();
     }
     if self.current == '.' {
       numeric_chars.push(self.current);
       self.advance();
-      while self.current.is_ascii_digit() {
+      while self.current.is_ascii_digit() && !self.hit_eoi() {
         numeric_chars.push(self.current);
         self.advance();
       }
@@ -114,6 +118,19 @@ impl Lexer {
     numeric_string
       .parse::<f64>()
       .map_err(|_| format!("Failed to parse '{}'", numeric_string))
+  }
+
+  fn lex_identifier(&mut self) -> Result<String, String> {
+    let mut chars: Vec<char> = Vec::new();
+    if self.current.is_alphabetic() {
+      chars.push(self.current);
+      self.advance();
+    }
+    while self.current.is_alphanumeric() && !self.hit_eoi() {
+      chars.push(self.current);
+      self.advance();
+    }
+    Ok(chars.iter().collect::<String>())
   }
 }
 

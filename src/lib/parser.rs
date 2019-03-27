@@ -26,7 +26,6 @@ impl<'a> Parser<'a> {
   fn expression(&mut self) -> Result<AstNode, String> {
     let mut results = vec![self.factor()];
     loop {
-      self.advance();
       match self.current_token() {
         Token::Plus => {
           self.advance();
@@ -42,16 +41,19 @@ impl<'a> Parser<'a> {
             }
           }
         }
-        Token::Eoi => {
+        Token::Eoi | Token::RParen => {
           let (args, errors) = split_results(results);
           if errors.len() > 0 {
-            return Err(unlines(errors));
+            return Err(unlines(errors).trim().to_string());
           } else {
             return Ok(AstNode::plus(args));
           }
         }
         _ => {
-          results.push(Err("Expected to see a '+' or '-' after term".to_string()));
+          return Err(format!(
+            "Expected to see a '+' or '-' after term {}",
+            self.current_token()
+          ));
         }
       }
     }
@@ -60,12 +62,11 @@ impl<'a> Parser<'a> {
   fn factor(&mut self) -> Result<AstNode, String> {
     let mut results = vec![self.exponential()];
     loop {
-      self.advance();
       match self.current_token() {
-        Token::Plus | Token::Minus | Token::Eoi => {
+        Token::Plus | Token::Minus | Token::Eoi | Token::RParen => {
           let (args, errors) = split_results(results);
           if errors.len() > 0 {
-            return Err(unlines(errors));
+            return Err(unlines(errors).trim().to_string());
           } else {
             return Ok(AstNode::times(args));
           }
@@ -87,8 +88,9 @@ impl<'a> Parser<'a> {
           }
         }
         _ => {
-          results.push(Err(
-            "Expected to see a '*' or '/' after factor.".to_string(),
+          return Err(format!(
+            "Expected to see a '*' or '/' after factor {}",
+            self.current_token()
           ));
         }
       }
@@ -98,12 +100,11 @@ impl<'a> Parser<'a> {
   fn exponential(&mut self) -> Result<AstNode, String> {
     let mut results = vec![self.atom()];
     loop {
-      self.advance();
       match self.current_token() {
-        Token::Plus | Token::Star | Token::Slash | Token::Eoi => {
+        Token::Plus | Token::Minus | Token::Star | Token::Slash | Token::Eoi | Token::RParen => {
           let (args, errors) = split_results(results);
           if errors.len() > 0 {
-            return Err(unlines(errors));
+            return Err(unlines(errors).trim().to_string());
           } else {
             return Ok(AstNode::power(args));
           }
@@ -113,7 +114,10 @@ impl<'a> Parser<'a> {
           results.push(self.atom());
         }
         _ => {
-          results.push(Err("Expected to see a '^' after a base".to_string()));
+          return Err(format!(
+            "Expected to see a '^' after base {}",
+            self.current_token()
+          ));
         }
       }
     }
@@ -135,9 +139,31 @@ impl<'a> Parser<'a> {
           _ => unreachable!(),
         }
       }
-      Token::Number(value) => Ok(AstNode::number(value)),
+      Token::Number(value) => {
+        self.advance();
+        Ok(AstNode::number(value))
+      }
+      Token::Constant(constant) => {
+        self.advance();
+        Ok(AstNode::constant(& constant))
+      }
+      Token::Identifier(identifier) => {
+        self.advance();
+        Ok(AstNode::identifier(&identifier))
+      }
+      Token::Function(function) => {
+        self.advance();
+        let result = self.atom();
+        match result {
+          Ok(ast) => Ok(AstNode::function(&function, ast)),
+          Err(msg) => Err(msg),
+        }
+      }
       _ => {
-        return Err("Expected to see a number here".to_string());
+        return Err(format!(
+          "Expected to see a number here {}",
+          self.current_token()
+        ));
       }
     }
   }
@@ -150,9 +176,37 @@ impl<'a> Parser<'a> {
 
   fn current_token(&self) -> Token {
     if self.current_index < self.tokens.len() {
-      self.tokens[self.current_index]
+      self.tokens[self.current_index].clone()
     } else {
       Token::Eoi
     }
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use crate::lib::ast::AstNode;
+  use crate::lib::parser::Parser;
+  use crate::lib::token::Token;
+  #[test]
+  fn parse_number() {
+    let value = 1.0;
+    let tokens = [Token::Number(value)];
+    let ast_result = Parser::parse(&tokens[..]);
+    assert!(ast_result.is_ok());
+    assert!(ast_result.unwrap().ast_equality(&AstNode::number(value)));
+  }
+
+  #[test]
+  fn parse_op() {
+    let a = 1.0;
+    let b = 2.0;
+    let op = Token::Plus;
+    let tokens = [Token::Number(a), op, Token::Number(b)];
+    let ast_result = Parser::parse(&tokens[..]);
+    assert!(ast_result.is_ok());
+    assert!(ast_result.unwrap().ast_equality(&AstNode::plus(
+      [AstNode::number(a), AstNode::number(b)].to_vec()
+    )));
   }
 }

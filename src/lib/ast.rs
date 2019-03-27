@@ -1,12 +1,15 @@
 use std::f64;
 use std::fmt;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum AstHead {
   Plus,
   Times,
   Power,
   Number(f64),
+  Constant(String),
+  Function(String),
+  Identifier(String),
 }
 
 #[derive(Clone)]
@@ -21,11 +24,14 @@ impl fmt::Display for AstNode {
       .tail
       .iter()
       .fold("".to_string(), |acc, x| format!("{} {}", acc, x));
-    match self.head {
+    match self.head.clone() {
       AstHead::Plus => write!(f, "(+{})", tail_string),
       AstHead::Times => write!(f, "(*{})", tail_string),
       AstHead::Power => write!(f, "(^{})", tail_string),
       AstHead::Number(value) => write!(f, "{}", value),
+      AstHead::Constant(name) => write!(f, "{}", name),
+      AstHead::Function(name) => write!(f, "({}{})", name, tail_string),
+      AstHead::Identifier(name) => write!(f, "{}", name),
     }
   }
 }
@@ -40,24 +46,54 @@ impl AstNode {
 
   pub fn evaluate(&self) -> f64 {
     let evaled_tail: Vec<f64> = self.tail.iter().map(|arg| arg.evaluate()).collect();
-    match self.head {
+    match self.head.clone() {
       AstHead::Plus => evaled_tail.iter().sum(),
       AstHead::Times => evaled_tail.iter().product(),
       AstHead::Power => {
         if evaled_tail.len() == 0 {
-          1.0
+          1.0_f64
         } else {
           let (first, rest) = evaled_tail.split_at(1);
           let first = first[0];
-          rest.iter().rfold(first, |acc, x| f64::powf(*x, acc))
+          rest.iter().rfold(first, |acc, x| x.powf(acc))
         }
-      }
+      },
       AstHead::Number(number) => number,
+      AstHead::Constant(name) => {
+        match name.as_ref() {
+          "pi" => f64::consts::PI,
+          "e" => f64::consts::E,
+          _ => f64::NAN,
+        }
+      },
+      AstHead::Function(name) => {
+        let first = evaled_tail.get(0).expect("Function should have been called with one argument");
+        match name.as_ref() {
+          "abs" => first.abs(),
+          "acos" => first.acos(),
+          "acosh" => first.acosh(),
+          "asin" => first.asin(),
+          "asinh" => first.asinh(),
+          "atan" => first.atan(),
+          "atanh" => first.atanh(),
+          "cos" => first.cos(),
+          "cosh" => first.cosh(),
+          "exp" => first.exp(),
+          "log" => first.ln(),
+          "sin" => first.sin(),
+          "sinh" => first.sinh(),
+          "sqrt" => first.sqrt(),
+          "tan" => first.tan(),
+          "tanh" => first.tanh(),
+          _ => f64::NAN,
+        }
+      },
+      AstHead::Identifier(_) => f64::NAN,
     }
   }
 
   pub fn ast_equality(&self, other: &Self) -> bool {
-    match (self.head, other.head) {
+    match (self.head.clone(), other.head.clone()) {
       (AstHead::Plus, AstHead::Plus)
       | (AstHead::Times, AstHead::Times)
       | (AstHead::Power, AstHead::Power) => {
@@ -81,7 +117,7 @@ impl AstNode {
           .tail
           .get(0)
           .expect("Should be able to get 0th element of non-empty vector."),
-        AstHead::Number(_) => self,
+        AstHead::Number(_) | AstHead::Constant(_) | AstHead::Function(_) | AstHead::Identifier(_) => self,
       }
     } else {
       self
@@ -95,7 +131,7 @@ impl AstNode {
   pub fn plus(arguments: Vec<AstNode>) -> AstNode {
     let len = arguments.len();
     match len {
-      0 => AstNode::new(AstHead::Number(0.0), Vec::new()),
+      0 => AstNode::number(0.0),
       1 => arguments
         .get(0)
         .expect("Should be able to get 0th element of a non-empty vector.")
@@ -107,7 +143,7 @@ impl AstNode {
   pub fn times(arguments: Vec<AstNode>) -> AstNode {
     let len = arguments.len();
     match len {
-      0 => AstNode::new(AstHead::Number(1.0), Vec::new()),
+      0 => AstNode::number(1.0),
       1 => arguments
         .get(0)
         .expect("Should be able to get 0th element of a non-empty vector.")
@@ -119,7 +155,7 @@ impl AstNode {
   pub fn power(arguments: Vec<AstNode>) -> AstNode {
     let len = arguments.len();
     match len {
-      0 => AstNode::new(AstHead::Number(1.0), Vec::new()),
+      0 => AstNode::number(1.0),
       1 => arguments
         .get(0)
         .expect("Should be able to get 0th element of a non-empty vector.")
@@ -138,5 +174,18 @@ impl AstNode {
 
   pub fn number(value: f64) -> AstNode {
     AstNode::new(AstHead::Number(value), Vec::new())
+  }
+
+  pub fn constant(constant: & str) -> AstNode {
+    let name = if constant == "π" { "pi" } else { constant };
+    AstNode::new(AstHead::Constant(name.to_owned()), Vec::new())
+  }
+
+  pub fn function(name: &str, argument: AstNode) -> AstNode {
+    AstNode::new(AstHead::Function(name.to_string()), vec![argument])
+  }
+
+  pub fn identifier(name: &str) -> AstNode {
+    AstNode::new(AstHead::Identifier(name.to_owned()), Vec::new())
   }
 }
