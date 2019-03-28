@@ -1,7 +1,9 @@
+//! The abstract syntax tree used for this calculator.
 use std::collections::HashMap;
 use std::f64;
 use std::fmt;
 
+/// An enumeration for the heads of the AST nodes.
 #[derive(Clone, Debug, PartialEq)]
 pub enum AstHead {
   Plus,
@@ -14,9 +16,12 @@ pub enum AstHead {
   Identifier(String),
 }
 
+/// AST node structure: (AstHead AstNode*)
 #[derive(Clone)]
 pub struct AstNode {
+  /// A tag to determine the type of AST node
   head: AstHead,
+  /// A list of arguments/children of the node
   tail: Box<Vec<AstNode>>,
 }
 
@@ -40,6 +45,7 @@ impl fmt::Display for AstNode {
 }
 
 impl AstNode {
+  /// Creates a new AST
   pub fn new(head: AstHead, tail: Vec<AstNode>) -> AstNode {
     AstNode {
       head,
@@ -47,6 +53,46 @@ impl AstNode {
     }
   }
 
+  /// A helper function that creates an AST node for assignments.
+  pub fn assign(name: &str, expr: AstNode) -> AstNode {
+    AstNode::new(AstHead::Assign, vec![AstNode::identifier(name), expr])
+  }
+
+  /// Tests whether two ASTs are equal as trees.
+  pub fn ast_equality(&self, other: &Self) -> bool {
+    match (self.head.clone(), other.head.clone()) {
+      (AstHead::Plus, AstHead::Plus)
+      | (AstHead::Times, AstHead::Times)
+      | (AstHead::Power, AstHead::Power) => {
+        if self.tail.len() == other.tail.len() {
+          let mut zipped = self.tail.iter().zip(other.tail.iter());
+          zipped.all(|(a, b)| a.ast_equality(b))
+        } else {
+          false
+        }
+      }
+      (AstHead::Number(value1), AstHead::Number(value2)) => value1 == value2,
+      (AstHead::Identifier(id1), AstHead::Identifier(id2)) => id1 == id2,
+      (AstHead::Function(name1), AstHead::Function(name2)) => {
+        if name1 == name2 && self.tail.len() == other.tail.len() {
+          let mut zipped = self.tail.iter().zip(other.tail.iter());
+          zipped.all(|(a, b)| a.ast_equality(b))
+        } else {
+          false
+        }
+      }
+      (_, _) => false,
+    }
+  }
+
+  /// A helper function that creates an AST node for constants.
+  /// This normalizes the string &ldquo;π&rdquo; as the ASCII &ldquo;pi&rdquo;
+  pub fn constant(constant: &str) -> AstNode {
+    let name = if constant == "π" { "pi" } else { constant };
+    AstNode::new(AstHead::Constant(name.to_owned()), Vec::new())
+  }
+
+  /// Evaluates the AST using the state defined in `memory`.
   pub fn evaluate(&self, memory: &mut HashMap<String, f64>) -> f64 {
     let head = self.head.clone();
     let mut tail_iter = self.tail.iter();
@@ -120,45 +166,22 @@ impl AstNode {
     }
   }
 
-  pub fn ast_equality(&self, other: &Self) -> bool {
-    match (self.head.clone(), other.head.clone()) {
-      (AstHead::Plus, AstHead::Plus)
-      | (AstHead::Times, AstHead::Times)
-      | (AstHead::Power, AstHead::Power) => {
-        if self.tail.len() == other.tail.len() {
-          let mut zipped = self.tail.iter().zip(other.tail.iter());
-          zipped.all(|(a, b)| a.ast_equality(b))
-        } else {
-          false
-        }
-      }
-      (AstHead::Number(value1), AstHead::Number(value2)) => value1 == value2,
-      (_, _) => false,
-    }
+  /// A helper function that creates an AST node for functions.
+  pub fn function(name: &str, argument: AstNode) -> AstNode {
+    AstNode::new(AstHead::Function(name.to_string()), vec![argument])
   }
 
-  pub fn prune(&self) -> &AstNode {
-    let tail_len = self.tail.len();
-    if tail_len == 1 {
-      match self.head {
-        AstHead::Plus | AstHead::Times | AstHead::Power | AstHead::Assign => self
-          .tail
-          .get(0)
-          .expect("Should be able to get 0th element of non-empty vector."),
-        AstHead::Number(_)
-        | AstHead::Constant(_)
-        | AstHead::Function(_)
-        | AstHead::Identifier(_) => self,
-      }
-    } else {
-      self
-    }
+  /// A helper function that creates an AST node for identifiers.
+  pub fn identifier(name: &str) -> AstNode {
+    AstNode::new(AstHead::Identifier(name.to_owned()), Vec::new())
   }
 
-  pub fn is_atom(&self) -> bool {
-    self.tail.len() == 0
+  /// A helper function that creates an AST node for numbers
+  pub fn number(value: f64) -> AstNode {
+    AstNode::new(AstHead::Number(value), Vec::new())
   }
 
+  /// A helper function that creates an AST node for addition
   pub fn plus(arguments: Vec<AstNode>) -> AstNode {
     let len = arguments.len();
     match len {
@@ -171,18 +194,7 @@ impl AstNode {
     }
   }
 
-  pub fn times(arguments: Vec<AstNode>) -> AstNode {
-    let len = arguments.len();
-    match len {
-      0 => AstNode::number(1.0),
-      1 => arguments
-        .get(0)
-        .expect("Should be able to get 0th element of a non-empty vector.")
-        .clone(),
-      _ => AstNode::new(AstHead::Times, arguments),
-    }
-  }
-
+  /// A helper function that creates an AST node for exponentiation
   pub fn power(arguments: Vec<AstNode>) -> AstNode {
     let len = arguments.len();
     match len {
@@ -203,24 +215,16 @@ impl AstNode {
     }
   }
 
-  pub fn number(value: f64) -> AstNode {
-    AstNode::new(AstHead::Number(value), Vec::new())
-  }
-
-  pub fn constant(constant: &str) -> AstNode {
-    let name = if constant == "π" { "pi" } else { constant };
-    AstNode::new(AstHead::Constant(name.to_owned()), Vec::new())
-  }
-
-  pub fn function(name: &str, argument: AstNode) -> AstNode {
-    AstNode::new(AstHead::Function(name.to_string()), vec![argument])
-  }
-
-  pub fn identifier(name: &str) -> AstNode {
-    AstNode::new(AstHead::Identifier(name.to_owned()), Vec::new())
-  }
-
-  pub fn assign(name: &str, expr: AstNode) -> AstNode {
-    AstNode::new(AstHead::Assign, vec![AstNode::identifier(name), expr])
+  /// A helper function that creates an AST node for multiplication
+  pub fn times(arguments: Vec<AstNode>) -> AstNode {
+    let len = arguments.len();
+    match len {
+      0 => AstNode::number(1.0),
+      1 => arguments
+        .get(0)
+        .expect("Should be able to get 0th element of a non-empty vector.")
+        .clone(),
+      _ => AstNode::new(AstHead::Times, arguments),
+    }
   }
 }

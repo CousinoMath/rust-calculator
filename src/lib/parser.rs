@@ -1,28 +1,28 @@
+//! The parser for the calculator
+
 use crate::lib::ast::AstNode;
 use crate::lib::token::Token;
 use crate::lib::{split_results, unlines};
 
+/// The parser state
 pub struct Parser<'a> {
+  /// Current index in the slice of tokens
   current_index: usize,
+  /// Slice of tokens
   tokens: &'a [Token],
 }
 
 impl<'a> Parser<'a> {
-  pub fn parse(tokens: &'a [Token]) -> Result<AstNode, String> {
-    let mut parser = Parser::new(tokens);
-    match parser.assignment() {
-      Ok(ast) => Ok(ast),
-      Err(msg) => Err(msg),
+  /// Advances the parser one token
+  fn advance(&mut self) {
+    if self.current_index + 1 < self.tokens.len() {
+      self.current_index += 1;
     }
   }
 
-  fn new(tokens: &'a [Token]) -> Parser {
-    Parser {
-      current_index: 0,
-      tokens,
-    }
-  }
-
+  /// Parses the rule for assignmnent
+  /// assignment ::= identifier '=' expression
+  ///            | expression
   fn assignment(&mut self) -> Result<AstNode, String> {
     let curr_token = self.current_token();
     if let Token::Identifier(id) = curr_token {
@@ -36,114 +36,12 @@ impl<'a> Parser<'a> {
     self.expression()
   }
 
-  fn expression(&mut self) -> Result<AstNode, String> {
-    let mut results = vec![self.factor()];
-    loop {
-      match self.current_token() {
-        Token::Plus => {
-          self.advance();
-          results.push(self.factor())
-        }
-        Token::Minus => {
-          self.advance();
-          let minus1 = AstNode::number(-1.0);
-          match self.factor() {
-            Ok(neg) => results.push(Ok(AstNode::times(vec![minus1, neg]))),
-            Err(error) => {
-              results.push(Err(error));
-            }
-          }
-        }
-        Token::Eoi | Token::RParen => {
-          let (args, errors) = split_results(results);
-          if errors.len() > 0 {
-            return Err(unlines(errors).trim().to_string());
-          } else {
-            return Ok(AstNode::plus(args));
-          }
-        }
-        _ => {
-          return Err(format!(
-            "Expected to see a '+' or '-' after term {}",
-            self.current_token()
-          ));
-        }
-      }
-    }
-  }
-
-  fn factor(&mut self) -> Result<AstNode, String> {
-    let mut results = vec![self.exponential()];
-    loop {
-      match self.current_token() {
-        Token::Plus | Token::Minus | Token::Eoi | Token::RParen => {
-          let (args, errors) = split_results(results);
-          if errors.len() > 0 {
-            return Err(unlines(errors).trim().to_string());
-          } else {
-            return Ok(AstNode::times(args));
-          }
-        }
-        Token::Star => {
-          self.advance();
-          results.push(self.exponential());
-        }
-        Token::Slash => {
-          self.advance();
-          let minus1 = AstNode::number(-1.0);
-          match self.exponential() {
-            Ok(denom) => {
-              results.push(Ok(AstNode::power(vec![denom, minus1])));
-            }
-            Err(msg) => {
-              results.push(Err(msg));
-            }
-          }
-        }
-        _ => {
-          return Err(format!(
-            "Expected to see a '*' or '/' after factor {}",
-            self.current_token()
-          ));
-        }
-      }
-    }
-  }
-
-  fn exponential(&mut self) -> Result<AstNode, String> {
-    let mut results: Vec<Result<AstNode, String>> = Vec::new();
-    match self.current_token() {
-      Token::Minus => {
-        self.advance();
-        let minus_1 = AstNode::number(-1.0);
-        results.push(self.atom().map(|node| AstNode::times(vec![minus_1, node])));
-      }
-      _ => results.push(self.atom()),
-    }
-    loop {
-      match self.current_token() {
-        Token::Plus | Token::Minus | Token::Star | Token::Slash | Token::Eoi | Token::RParen => {
-          let (args, errors) = split_results(results);
-          if errors.len() > 0 {
-            return Err(unlines(errors).trim().to_string());
-          } else {
-            return Ok(AstNode::power(args));
-          }
-        }
-        Token::Caret => {
-          self.advance();
-          results.push(self.exponential());
-        }
-        _ => {
-          return Err(format!(
-            "Expected to see a '^' after base {}",
-            self.current_token()
-          ));
-        }
-      }
-    }
-  }
-
+  /// Parses atoms
+  /// atom ::= '(' expression ')'
+  ///      | Function atom
+  ///      | Number
+  ///      | Identifier
+  ///      | Constant
   fn atom(&mut self) -> Result<AstNode, String> {
     match self.current_token() {
       Token::LParen => {
@@ -189,12 +87,7 @@ impl<'a> Parser<'a> {
     }
   }
 
-  fn advance(&mut self) {
-    if self.current_index + 1 < self.tokens.len() {
-      self.current_index += 1;
-    }
-  }
-
+  /// Returns the current token under consideration
   fn current_token(&self) -> Token {
     if self.current_index < self.tokens.len() {
       self.tokens[self.current_index].clone()
@@ -203,6 +96,139 @@ impl<'a> Parser<'a> {
     }
   }
 
+  /// Parses the rule for exponentials
+  /// exponential ::= atom ('^' atom)*
+  ///             | '-' exponential
+  fn exponential(&mut self) -> Result<AstNode, String> {
+    let mut results: Vec<Result<AstNode, String>> = Vec::new();
+    match self.current_token() {
+      Token::Minus => {
+        self.advance();
+        let minus_1 = AstNode::number(-1.0);
+        results.push(self.exponential().map(|node| AstNode::times(vec![minus_1, node])));
+      }
+      _ => results.push(self.atom()),
+    }
+    loop {
+      match self.current_token() {
+        Token::Plus | Token::Minus | Token::Star | Token::Slash | Token::Eoi | Token::RParen => {
+          let (args, errors) = split_results(results);
+          if errors.len() > 0 {
+            return Err(unlines(errors).trim().to_string());
+          } else {
+            return Ok(AstNode::power(args));
+          }
+        }
+        Token::Caret => {
+          self.advance();
+          results.push(self.exponential());
+        }
+        _ => {
+          return Err(format!(
+            "Expected to see a '^' after base {}",
+            self.current_token()
+          ));
+        }
+      }
+    }
+  }
+
+  /// Parses the rule for expressions
+  /// expression ::= term (('+' | '-') term)*
+  fn expression(&mut self) -> Result<AstNode, String> {
+    let mut results = vec![self.factor()];
+    loop {
+      match self.current_token() {
+        Token::Plus => {
+          self.advance();
+          results.push(self.factor())
+        }
+        Token::Minus => {
+          self.advance();
+          let minus1 = AstNode::number(-1.0);
+          match self.factor() {
+            Ok(neg) => results.push(Ok(AstNode::times(vec![minus1, neg]))),
+            Err(error) => {
+              results.push(Err(error));
+            }
+          }
+        }
+        Token::Eoi | Token::RParen => {
+          let (args, errors) = split_results(results);
+          if errors.len() > 0 {
+            return Err(unlines(errors).trim().to_string());
+          } else {
+            return Ok(AstNode::plus(args));
+          }
+        }
+        _ => {
+          return Err(format!(
+            "Expected to see a '+' or '-' after term {}",
+            self.current_token()
+          ));
+        }
+      }
+    }
+  }
+
+  /// Parses the rule for factors
+  /// factor ::= exponential (('*' | '/') exponential)*
+  fn factor(&mut self) -> Result<AstNode, String> {
+    let mut results = vec![self.exponential()];
+    loop {
+      match self.current_token() {
+        Token::Plus | Token::Minus | Token::Eoi | Token::RParen => {
+          let (args, errors) = split_results(results);
+          if errors.len() > 0 {
+            return Err(unlines(errors).trim().to_string());
+          } else {
+            return Ok(AstNode::times(args));
+          }
+        }
+        Token::Star => {
+          self.advance();
+          results.push(self.exponential());
+        }
+        Token::Slash => {
+          self.advance();
+          let minus1 = AstNode::number(-1.0);
+          match self.exponential() {
+            Ok(denom) => {
+              results.push(Ok(AstNode::power(vec![denom, minus1])));
+            }
+            Err(msg) => {
+              results.push(Err(msg));
+            }
+          }
+        }
+        _ => {
+          return Err(format!(
+            "Expected to see a '*' or '/' after factor {}",
+            self.current_token()
+          ));
+        }
+      }
+    }
+  }
+
+  /// Initializes parser state on a slice of tokens.
+  fn new(tokens: &'a [Token]) -> Parser {
+    Parser {
+      current_index: 0,
+      tokens,
+    }
+  }
+
+  /// Parses a slice of tokens into an abstract syntax tree.
+  pub fn parse(tokens: &'a [Token]) -> Result<AstNode, String> {
+    let mut parser = Parser::new(tokens);
+    match parser.assignment() {
+      Ok(ast) => Ok(ast),
+      Err(msg) => Err(msg),
+    }
+  }
+
+  /// Peeks at the `step`th token ahead. Used in the assignment rule.
   fn peek(&self, step: usize) -> Token {
     if self.current_index + step < self.tokens.len() {
       self.tokens[self.current_index + step].clone()

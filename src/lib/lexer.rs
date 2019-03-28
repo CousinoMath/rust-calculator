@@ -1,15 +1,32 @@
+//! Lexical analyzer for the calculator
+
 use crate::lib::token::{recognize_identifier, Token};
 use crate::lib::unlines;
 
+/// Lexer state
 pub struct Lexer {
+  /// The beginning index of a token's first code point in the source string
   initial: usize,
+  /// The starting index of the current code point in the source string
   current_start: usize,
+  /// The starting index of the *next* code point in the source string
   current_end: usize,
+  /// The current code point
   current: char,
+  /// The source string
   source: String,
 }
 
 impl Lexer {
+  /// Lexes a given string and returns a result.
+  /// 
+  /// # Examples
+  /// 
+  /// ```
+  /// assert_eq!(Lexer::lex("("), Ok(Token::LParen));
+  /// assert_eq!(Lexer::lex("2.71828182845904523536"), Ok(Token::Number(2.71828182845904523536)));
+  /// assert!(Lexer::lex("0.1.0").is_err());
+  /// ```
   pub fn lex(input: &str) -> Result<Vec<Token>, String> {
     let mut lexer = Lexer::new(input);
     let mut tokens = Vec::new();
@@ -28,6 +45,7 @@ impl Lexer {
     }
   }
 
+  /// Create a new lexer from a source string.
   fn new(source: &str) -> Lexer {
     let current = source.chars().next();
     Lexer {
@@ -39,6 +57,7 @@ impl Lexer {
     }
   }
 
+  /// Find the next token in the source string.
   fn next_token(&mut self) -> Result<Token, String> {
     self.skip_whitespace();
     self.initial = self.current_start;
@@ -84,6 +103,7 @@ impl Lexer {
     }
   }
 
+  /// Advance the lexer by one code point in the source string.
   fn advance(&mut self) {
     self.current_start = self.current_end;
     if self.current_start < self.source.len() {
@@ -97,16 +117,19 @@ impl Lexer {
     }
   }
 
+  /// Skips over whitespace in the source string.
   fn skip_whitespace(&mut self) {
     while self.current.is_whitespace() {
       self.advance();
     }
   }
 
+  /// Determines whether the end of input has been reached.
   fn hit_eoi(&self) -> bool {
     self.current_start >= self.current_end
   }
 
+  /// Lexes and parses a number into a `f64` float.
   fn lex_number(&mut self) -> Result<f64, String> {
     let mut numeric_chars: Vec<char> = Vec::new();
     while (self.current.is_ascii_digit() || self.current == '.') && !self.hit_eoi() {
@@ -119,6 +142,7 @@ impl Lexer {
       .map_err(|_| format!("Failed to parse '{}' as a number.", numeric_string))
   }
 
+  /// Lexes an identifier
   fn lex_identifier(&mut self) -> Result<String, String> {
     let mut chars: Vec<char> = Vec::new();
     if self.current.is_alphabetic() {
@@ -129,7 +153,12 @@ impl Lexer {
       chars.push(self.current);
       self.advance();
     }
-    Ok(chars.iter().collect::<String>())
+    let identifier = chars.iter().collect::<String>();
+    if identifier.len() > 0 {
+      Ok(identifier)
+    } else {
+      Err("Identifiers must be alphanumeric and start with an alphabetic character.".to_string())
+    }
   }
 }
 

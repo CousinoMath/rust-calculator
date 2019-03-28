@@ -1,5 +1,8 @@
+//! Lexical tokens used by the calculator.
+
 use std::fmt;
 
+/// An enumeration for the tokens accepted by the calculator.
 #[derive(Clone, PartialEq, Debug)]
 pub enum Token {
   LParen,
@@ -37,13 +40,16 @@ impl fmt::Display for Token {
   }
 }
 
-pub fn is_eoi(token: Token) -> bool {
-  match token {
-    Token::Eoi => true,
-    _ => false,
-  }
-}
-
+/// A helper function to distinguish various kinds of identifiers: variables,
+/// constancts, and functions
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(recognize_identifier("pi"), Token::Constant("pi".to_string()));
+/// assert_eq!(recognize_identifier("sqrt"), Token::Function("sqrt".to_string()));
+/// assert_eq!(recognize_identifier("variable"), Token::Variable("variable".to_string()));
+/// ```
 pub fn recognize_identifier(identifier: &str) -> Token {
   let constants = ["e", "pi", "π"];
   let functions = [
@@ -56,16 +62,5 @@ pub fn recognize_identifier(identifier: &str) -> Token {
     Token::Function(functions[index].to_owned())
   } else {
     Token::Identifier(identifier.to_owned())
-  }
-}
-
-#[cfg(test)]
-mod test {
-  #[test]
-  fn test_is_eoi() {
-    use crate::lib::token::is_eoi;
-    use crate::lib::token::Token;
-    assert!(is_eoi(Token::Eoi));
-    assert!(!is_eoi(Token::LParen));
   }
 }
