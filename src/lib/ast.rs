@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::f64;
 use std::fmt;
 
@@ -6,6 +7,7 @@ pub enum AstHead {
   Plus,
   Times,
   Power,
+  Assign,
   Number(f64),
   Constant(String),
   Function(String),
@@ -28,6 +30,7 @@ impl fmt::Display for AstNode {
       AstHead::Plus => write!(f, "(+{})", tail_string),
       AstHead::Times => write!(f, "(*{})", tail_string),
       AstHead::Power => write!(f, "(^{})", tail_string),
+      AstHead::Assign => write!(f, "(={})", tail_string),
       AstHead::Number(value) => write!(f, "{}", value),
       AstHead::Constant(name) => write!(f, "{}", name),
       AstHead::Function(name) => write!(f, "({}{})", name, tail_string),
@@ -44,9 +47,25 @@ impl AstNode {
     }
   }
 
-  pub fn evaluate(&self) -> f64 {
-    let evaled_tail: Vec<f64> = self.tail.iter().map(|arg| arg.evaluate()).collect();
-    match self.head.clone() {
+  pub fn evaluate(&self, memory: &mut HashMap<String, f64>) -> f64 {
+    let head = self.head.clone();
+    let mut tail_iter = self.tail.iter();
+    let mut identifier: Option<String> = None;
+    if head == AstHead::Assign {
+      let ident_node = tail_iter
+        .next()
+        .expect("Should have been an identifier as the first child of an assignment.");
+      match ident_node.head.clone() {
+        AstHead::Identifier(name) => {
+          identifier = Some(name);
+        }
+        _ => unreachable!(),
+      }
+    }
+    let evaled_tail = tail_iter
+      .map(|arg| arg.evaluate(memory))
+      .collect::<Vec<f64>>();
+    match head {
       AstHead::Plus => evaled_tail.iter().sum(),
       AstHead::Times => evaled_tail.iter().product(),
       AstHead::Power => {
@@ -55,19 +74,19 @@ impl AstNode {
         } else {
           let (first, rest) = evaled_tail.split_at(1);
           let first = first[0];
-          rest.iter().rfold(first, |acc, x| x.powf(acc))
+          rest.iter().rfold(first, |acc, &x| acc.powf(x))
         }
-      },
+      }
       AstHead::Number(number) => number,
-      AstHead::Constant(name) => {
-        match name.as_ref() {
-          "pi" => f64::consts::PI,
-          "e" => f64::consts::E,
-          _ => f64::NAN,
-        }
+      AstHead::Constant(name) => match name.as_ref() {
+        "pi" => f64::consts::PI,
+        "e" => f64::consts::E,
+        _ => f64::NAN,
       },
       AstHead::Function(name) => {
-        let first = evaled_tail.get(0).expect("Function should have been called with one argument");
+        let first = evaled_tail
+          .get(0)
+          .expect("Function should have been called with one argument");
         match name.as_ref() {
           "abs" => first.abs(),
           "acos" => first.acos(),
@@ -87,8 +106,17 @@ impl AstNode {
           "tanh" => first.tanh(),
           _ => f64::NAN,
         }
-      },
-      AstHead::Identifier(_) => f64::NAN,
+      }
+      AstHead::Identifier(name) => *memory.get(&name).unwrap_or(&f64::NAN),
+      AstHead::Assign => {
+        let ident_name =
+          identifier.expect("Should have been an identifier as the first child to an assignment.");
+        let ident_value = *evaled_tail
+          .get(0)
+          .expect("Should have been a value as the second child an assignment.");
+        memory.insert(ident_name, ident_value);
+        ident_value
+      }
     }
   }
 
@@ -113,11 +141,14 @@ impl AstNode {
     let tail_len = self.tail.len();
     if tail_len == 1 {
       match self.head {
-        AstHead::Plus | AstHead::Times | AstHead::Power => self
+        AstHead::Plus | AstHead::Times | AstHead::Power | AstHead::Assign => self
           .tail
           .get(0)
           .expect("Should be able to get 0th element of non-empty vector."),
-        AstHead::Number(_) | AstHead::Constant(_) | AstHead::Function(_) | AstHead::Identifier(_) => self,
+        AstHead::Number(_)
+        | AstHead::Constant(_)
+        | AstHead::Function(_)
+        | AstHead::Identifier(_) => self,
       }
     } else {
       self
@@ -176,7 +207,7 @@ impl AstNode {
     AstNode::new(AstHead::Number(value), Vec::new())
   }
 
-  pub fn constant(constant: & str) -> AstNode {
+  pub fn constant(constant: &str) -> AstNode {
     let name = if constant == "π" { "pi" } else { constant };
     AstNode::new(AstHead::Constant(name.to_owned()), Vec::new())
   }
@@ -187,5 +218,9 @@ impl AstNode {
 
   pub fn identifier(name: &str) -> AstNode {
     AstNode::new(AstHead::Identifier(name.to_owned()), Vec::new())
+  }
+
+  pub fn assign(name: &str, expr: AstNode) -> AstNode {
+    AstNode::new(AstHead::Assign, vec![AstNode::identifier(name), expr])
   }
 }

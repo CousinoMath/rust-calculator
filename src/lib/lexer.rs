@@ -1,7 +1,8 @@
-use crate::lib::token::{ Token, recognize_identifier, };
+use crate::lib::token::{recognize_identifier, Token};
 use crate::lib::unlines;
 
 pub struct Lexer {
+  initial: usize,
   current_start: usize,
   current_end: usize,
   current: char,
@@ -30,6 +31,7 @@ impl Lexer {
   fn new(source: &str) -> Lexer {
     let current = source.chars().next();
     Lexer {
+      initial: 0,
       current_start: 0,
       current_end: current.map_or(0, |c| c.len_utf8()),
       current: current.unwrap_or('\0'),
@@ -39,6 +41,7 @@ impl Lexer {
 
   fn next_token(&mut self) -> Result<Token, String> {
     self.skip_whitespace();
+    self.initial = self.current_start;
     match self.current {
       '(' => {
         self.advance();
@@ -67,6 +70,10 @@ impl Lexer {
       '^' => {
         self.advance();
         Ok(Token::Caret)
+      }
+      '=' => {
+        self.advance();
+        Ok(Token::Equals)
       }
       c if c.is_ascii_digit() || c == '.' => self.lex_number().map(|n| Token::Number(n)),
       c if c.is_alphabetic() => self.lex_identifier().map(|id| recognize_identifier(&id)),
@@ -102,22 +109,14 @@ impl Lexer {
 
   fn lex_number(&mut self) -> Result<f64, String> {
     let mut numeric_chars: Vec<char> = Vec::new();
-    while self.current.is_ascii_digit() && !self.hit_eoi() {
+    while (self.current.is_ascii_digit() || self.current == '.') && !self.hit_eoi() {
       numeric_chars.push(self.current);
       self.advance();
-    }
-    if self.current == '.' {
-      numeric_chars.push(self.current);
-      self.advance();
-      while self.current.is_ascii_digit() && !self.hit_eoi() {
-        numeric_chars.push(self.current);
-        self.advance();
-      }
     }
     let numeric_string = numeric_chars.iter().collect::<String>();
     numeric_string
       .parse::<f64>()
-      .map_err(|_| format!("Failed to parse '{}'", numeric_string))
+      .map_err(|_| format!("Failed to parse '{}' as a number.", numeric_string))
   }
 
   fn lex_identifier(&mut self) -> Result<String, String> {

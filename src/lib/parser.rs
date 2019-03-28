@@ -10,7 +10,7 @@ pub struct Parser<'a> {
 impl<'a> Parser<'a> {
   pub fn parse(tokens: &'a [Token]) -> Result<AstNode, String> {
     let mut parser = Parser::new(tokens);
-    match parser.expression() {
+    match parser.assignment() {
       Ok(ast) => Ok(ast),
       Err(msg) => Err(msg),
     }
@@ -21,6 +21,19 @@ impl<'a> Parser<'a> {
       current_index: 0,
       tokens,
     }
+  }
+
+  fn assignment(&mut self) -> Result<AstNode, String> {
+    let curr_token = self.current_token();
+    if let Token::Identifier(id) = curr_token {
+      if self.peek(1) == Token::Equals {
+        self.advance();
+        self.advance();
+        let result = self.expression();
+        return result.map(|expr| AstNode::assign(&id, expr));
+      }
+    }
+    self.expression()
   }
 
   fn expression(&mut self) -> Result<AstNode, String> {
@@ -98,7 +111,15 @@ impl<'a> Parser<'a> {
   }
 
   fn exponential(&mut self) -> Result<AstNode, String> {
-    let mut results = vec![self.atom()];
+    let mut results: Vec<Result<AstNode, String>> = Vec::new();
+    match self.current_token() {
+      Token::Minus => {
+        self.advance();
+        let minus_1 = AstNode::number(-1.0);
+        results.push(self.atom().map(|node| AstNode::times(vec![minus_1, node])));
+      }
+      _ => results.push(self.atom()),
+    }
     loop {
       match self.current_token() {
         Token::Plus | Token::Minus | Token::Star | Token::Slash | Token::Eoi | Token::RParen => {
@@ -111,7 +132,7 @@ impl<'a> Parser<'a> {
         }
         Token::Caret => {
           self.advance();
-          results.push(self.atom());
+          results.push(self.exponential());
         }
         _ => {
           return Err(format!(
@@ -145,7 +166,7 @@ impl<'a> Parser<'a> {
       }
       Token::Constant(constant) => {
         self.advance();
-        Ok(AstNode::constant(& constant))
+        Ok(AstNode::constant(&constant))
       }
       Token::Identifier(identifier) => {
         self.advance();
@@ -177,6 +198,14 @@ impl<'a> Parser<'a> {
   fn current_token(&self) -> Token {
     if self.current_index < self.tokens.len() {
       self.tokens[self.current_index].clone()
+    } else {
+      Token::Eoi
+    }
+  }
+
+  fn peek(&self, step: usize) -> Token {
+    if self.current_index + step < self.tokens.len() {
+      self.tokens[self.current_index + step].clone()
     } else {
       Token::Eoi
     }
